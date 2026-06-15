@@ -8,7 +8,7 @@
                 <h1>Dashboard</h1>
             </div>
             <div class="user-profile">
-                <span>Olá, Admin</span>
+                <span>Olá, {{ $user->name }}</span>
                 <div class="user-avatar">A</div>
             </div>
         </header>
@@ -89,7 +89,7 @@
             <div class="table-card">
                 <div class="table-header">
                     <h2><i class="fa-solid fa-receipt" style="margin-right: 8px; color: var(--success);"></i>Últimos 5 Pedidos</h2>
-                    <a href="#" class="btn-view-all">Ver todos</a>
+                    <a href="{{ Route('dashboard.pedidos') }}" class="btn-view-all">Ver todos</a>
                 </div>
                 <table>
                     <thead>

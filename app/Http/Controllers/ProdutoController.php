@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Compras;
+use App\Models\User;
 use \Illuminate\Support\Number;
 
 class ProdutoController extends Controller
@@ -59,9 +60,49 @@ class ProdutoController extends Controller
         ], Response::HTTP_OK);
     }
 
+   
     /**
      * Cadastrar produto
      */
+     public function cadastrar(){
+        return view('adicionarProduto');
+    }
+    public function cadastrarProduto(Request $request){
+
+        // 1. Limpa o valor ANTES da validação para o Laravel aceitar como 'numeric'
+        if ($request->has('preco')) {
+            $precoLimpo = str_replace(['.', ','], ['', '.'], $request->preco);
+            $request->merge(['preco' => $precoLimpo]);
+        }
+
+        $request->validate([
+            'nome' => 'required|string|max:255',
+            'descricao' => 'required|string',
+            'preco' => 'required|numeric',
+            'categoria' => 'required|integer',
+            'imagem' => 'required|image|mimes:jpg,jpeg,png,webp|max:2048'
+        ]);
+        
+        $imagem = $request->file('imagem')->store(
+            'produtos',
+            'public'
+        );
+
+     
+        $produto = Produtos::create([
+            'nome' => $request->nome,
+            'descricao' => $request->descricao,
+            'preco' => $request->preco,
+            'categoria' => $request->categoria,
+            'imagem' => $imagem,
+        ]);
+
+        $produto->imagem = asset('storage/' . $produto->imagem);
+
+        return redirect()->route('dashboard.cadastrarProduto');
+        
+    }
+
     public function store(Request $request)
     {
         $request->validate([
@@ -97,9 +138,34 @@ class ProdutoController extends Controller
     /**
      * Atualizar produto
      */
+     
+    public function editar(Produtos $produto){
+
+        return view('editarProduto',[
+            'produto' => $produto
+        ]);
+    }
+
+    public function editarProduto(Request $request , $id){
+
+        if ($request->has('preco')) {
+            $precoLimpo = str_replace(['.', ','], ['', '.'], $request->preco);
+            $request->merge(['preco' => $precoLimpo]);
+        }
+
+        $produto = Produtos::find($id);
+
+        $produto->update([
+            'nome' => $request->nome ?? $produto->nome,
+            'preco' => $request->preco ?? $produto->preco,
+        ]);
+
+        return redirect()->route('dashboard.produtos');
+    }
+
     public function update(Request $request, $id)
     {
-        $produto = Produtos::find($id);
+        $produto = Produtos::find($produto);
 
         if (!$produto) {
             return response()->json([
@@ -150,6 +216,20 @@ class ProdutoController extends Controller
     /**
      * Excluir produto
      */
+    public function deletar(Produtos $produto)
+    {
+        if (
+            $produto->imagem &&
+            Storage::disk('public')->exists($produto->imagem)
+        ) {
+            Storage::disk('public')->delete($produto->imagem);
+        }
+
+        $produto->delete();
+
+        return redirect()->route('dashboard.produtos');
+    }
+
     public function destroy($id)
     {
         $produto = Produtos::find($id);
@@ -178,11 +258,12 @@ class ProdutoController extends Controller
 
     public function retornarQtdComidas(){
         $QTDProdutos = Produtos::count();
-        $ProdutosRecente = Produtos::paginate(10);
+        $user = User::find('1');
+        
         $ultimosProdutos = Produtos::orderBy('created_at', 'desc')->take(4)->get();
         $ultimasCompras = Compras::orderBy('created_at', 'desc')->take(4)->get();
         
-        $qtdPedidos = Compras::count();
+        $qtdPedidos = Compras::whereDate('created_at', now())->count();
         $total = Compras::where('status', 2)->sum('total');
 
 
@@ -194,7 +275,7 @@ class ProdutoController extends Controller
 
         return view('conteudo',[
             'qtdProdutos' => $QTDProdutos,
-            'ProdutosRecente' => $ProdutosRecente,
+            'user' => $user,
             'ultimosProdutos' => $ultimosProdutos,
             'ultimasCompras' => $ultimasCompras,
             'qtdPedidos' => $qtdPedidos,
@@ -208,5 +289,43 @@ class ProdutoController extends Controller
         $produtos = Produtos::all();
         
         return view('produtos',compact('produtos'));
+    }
+
+    public function pedidos(){
+
+        $pedidos = Compras::orderBy('id','desc')->get();
+        $qtdPedidos = Compras::whereDate('created_at', now())->count();
+        $pendentes = Compras::Where('status', 1)->count();
+        $concluidos = Compras::where('status', 2)->count();
+
+        $total = Compras::where('status', 2)->sum('total');
+
+
+      
+        $valorEmDolar = $total; 
+        $valorEmReais = (float)$total;
+        $valorFormatado = 'R$ ' . number_format($valorEmReais, 2, ',', '.');
+
+
+        return view ('pedidos',compact('pedidos','valorFormatado','qtdPedidos','concluidos','pendentes'));
+    }
+
+    public function atualizar(Compras $compra){
+
+        if($compra->status ==1){
+           $compra->status = 2;
+           $compra->save();
+        }
+        
+        return redirect()->route('dashboard.pedidos');
+    }
+    public function cancelar(Compras $compra){
+
+        if($compra->status == 1){
+            $compra->status = 3;
+            $compra->save();
+        }
+
+        return redirect()->route('dashboard.pedidos');
     }
 }
